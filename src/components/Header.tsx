@@ -7,11 +7,10 @@ import {
   Clock,
   ShieldCheck,
   CheckCircle2,
-  FileSpreadsheet,
   Printer,
   Download,
+  RotateCcw,
 } from 'lucide-react';
-import { getActiveSheetViewUrl } from '../utils/csvSync';
 
 interface HeaderProps {
   currentTime: Date;
@@ -30,6 +29,7 @@ interface HeaderProps {
   isAppsScriptConfigured?: boolean;
   onOpenChangeLink?: () => void;
   sheetViewUrl?: string;
+  onResetAttendance?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -49,6 +49,7 @@ export const Header: React.FC<HeaderProps> = ({
   isAppsScriptConfigured = false,
   onOpenChangeLink,
   sheetViewUrl,
+  onResetAttendance,
 }) => {
   const formattedTime = currentTime.toLocaleTimeString('id-ID', {
     hour: '2-digit',
@@ -197,17 +198,18 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="hidden sm:inline">Ekspor CSV</span>
             </button>
 
-            {/* Google Spreadsheet Link */}
-            <a
-              href={sheetViewUrl || getActiveSheetViewUrl()}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
-              title="Buka Database Google Spreadsheet Asli di Tab Baru"
-            >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-              <span className="text-xs font-medium hidden xl:inline">Google Sheet</span>
-            </a>
+            {/* Tombol Reset Daftar Hadir */}
+            {onResetAttendance && (
+              <button
+                type="button"
+                onClick={onResetAttendance}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/60 text-xs font-medium text-rose-300 hover:text-white rounded-lg transition-colors cursor-pointer"
+                title="Reset / Kosongkan Seluruh Daftar Hadir"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
+                <span>Reset Hadir</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

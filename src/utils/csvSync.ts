@@ -291,26 +291,14 @@ export function parseGoogleSheetCSV(csvText: string): Voter[] {
 export function getSavedAttendance(): AttendanceMap {
   try {
     const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-    const map: AttendanceMap = saved ? JSON.parse(saved) : {};
-    if (map[8] === undefined) {
-      map[8] = {
-        hadir: true,
-        hadirAt: '19.32',
-        petugas: 'Google Sheets (Sinkronisasi)',
-        catatan: 'Tercatat hadir di sheet',
-      };
+    if (saved !== null) {
+      return JSON.parse(saved);
     }
-    return map;
+    return {};
   } catch (err) {
     console.error('Error reading localStorage attendance:', err);
   }
-  return {
-    8: {
-      hadir: true,
-      hadirAt: '19.32',
-      petugas: 'Google Sheets (Sinkronisasi)',
-    },
-  };
+  return {};
 }
 
 /**

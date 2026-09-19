@@ -39,7 +39,7 @@ import {
   getAppsScriptUrl,
   getActiveSheetViewUrl,
 } from './utils/csvSync';
-import { ShieldCheck, Info, Sparkles, CheckCircle2, AlertTriangle, ExternalLink } from 'lucide-react';
+import { ShieldCheck, Info, Sparkles, CheckCircle2, AlertTriangle, ExternalLink, RotateCcw } from 'lucide-react';
 
 export default function App() {
   const [voters, setVoters] = useState<Voter[]>(INITIAL_VOTERS);
@@ -65,6 +65,7 @@ export default function App() {
   const [showReportModal, setShowReportModal] = useState<boolean>(false);
   const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
   const [showChangeLinkModal, setShowChangeLinkModal] = useState<boolean>(false);
+  const [showResetConfirmModal, setShowResetConfirmModal] = useState<boolean>(false);
   const [sheetViewUrl, setSheetViewUrl] = useState<string>(() => getActiveSheetViewUrl());
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -193,11 +194,23 @@ export default function App() {
     });
   };
 
+  // Computed total currently attended
+  const totalAttended = voters.filter(
+    (v) =>
+      Boolean(attendanceMap[v.no]?.hadir) ||
+      Boolean(v.absensi && v.absensi.trim().length > 0 && v.absensi.toUpperCase() !== '0')
+  ).length;
+
   // Reset attendance
   const handleResetAttendance = () => {
     setAttendanceMap({});
     saveAttendance({});
-    showToast('Seluruh data presensi lokal telah di-reset.');
+    setVoters((prev) => prev.map((v) => ({ ...v, absensi: '' })));
+    setShowResetConfirmModal(false);
+    if (soundEnabled) {
+      playAttendanceBeep('undo');
+    }
+    showToast('✓ Seluruh daftar hadir berhasil direset ke status Belum Hadir.');
   };
 
   // Export CSV of Attendance
@@ -265,6 +278,7 @@ export default function App() {
         isAppsScriptConfigured={isAppsScriptConfigured}
         onOpenChangeLink={() => setShowChangeLinkModal(true)}
         sheetViewUrl={sheetViewUrl}
+        onResetAttendance={() => setShowResetConfirmModal(true)}
       />
 
       {/* Main Content Area */}
@@ -420,6 +434,47 @@ export default function App() {
           showToast('✓ Tautan Google Spreadsheet berhasil diperbarui & disinkronkan!');
         }}
       />
+
+      {/* Modal Konfirmasi Reset Seluruh Daftar Hadir */}
+      {showResetConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 text-slate-800 animate-in fade-in zoom-in-95 duration-150">
+            <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-4">
+              <RotateCcw className="w-6 h-6" />
+            </div>
+            <h3 className="text-lg font-bold text-center text-slate-900 mb-2">
+              Reset Seluruh Daftar Hadir?
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-600 text-center mb-5 leading-relaxed">
+              Tindakan ini akan mengosongkan status kehadiran{' '}
+              <strong className="text-rose-600 font-bold">{totalAttended} pemilih</strong> yang saat ini tercatat hadir dan mengembalikan seluruh DPT ke status <strong>Belum Hadir</strong>.
+            </p>
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl mb-6 flex items-start gap-2.5 text-xs text-amber-900">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <span>
+                Pastikan Anda telah mengekspor cadangan data via tombol <strong>Ekspor CSV</strong> sebelum melakukan reset jika data diperlukan di kemudian waktu.
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowResetConfirmModal(false)}
+                className="flex-1 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-semibold rounded-xl transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleResetAttendance}
+                className="flex-1 py-2.5 px-4 bg-rose-600 hover:bg-rose-700 text-white text-xs sm:text-sm font-semibold rounded-xl transition-colors shadow-sm cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>Ya, Reset Hadir</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
