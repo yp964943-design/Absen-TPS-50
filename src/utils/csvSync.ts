@@ -8,10 +8,33 @@ export const DEFAULT_GOOGLE_SHEET_VIEW_URL =
 
 export const GOOGLE_SHEET_CSV_URL = DEFAULT_GOOGLE_SHEET_CSV_URL;
 
-export const LOCAL_STORAGE_KEY = 'pilkades_wanajaya_attendance_records_v1';
+export const LOCAL_STORAGE_KEY = 'pilkades_wanajaya_attendance_records_v2';
 export const OPERATOR_STORAGE_KEY = 'pilkades_wanajaya_operator_name';
 export const APPS_SCRIPT_STORAGE_KEY = 'pilkades_wanajaya_apps_script_url';
 export const SHEET_URL_STORAGE_KEY = 'pilkades_wanajaya_custom_sheet_url';
+
+// Purge obsolete v1 cache immediately upon script initialization
+try {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    window.localStorage.removeItem('pilkades_wanajaya_attendance_records_v1');
+  }
+} catch (e) {
+  // ignore
+}
+
+/**
+ * Clear all Pilkades data from LocalStorage
+ */
+export function clearAllLocalStorage(): void {
+  try {
+    localStorage.removeItem('pilkades_wanajaya_attendance_records_v1');
+    localStorage.removeItem('pilkades_wanajaya_attendance_records_v2');
+    localStorage.removeItem(LOCAL_STORAGE_KEY);
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({}));
+  } catch (err) {
+    console.error('Error clearing local storage:', err);
+  }
+}
 
 export interface AttendanceRecord {
   hadir: boolean;
@@ -292,7 +315,12 @@ export function getSavedAttendance(): AttendanceMap {
   try {
     const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (saved !== null) {
-      return JSON.parse(saved);
+      const map: AttendanceMap = JSON.parse(saved);
+      if (map[8]) {
+        delete map[8];
+        saveAttendance(map);
+      }
+      return map;
     }
     return {};
   } catch (err) {

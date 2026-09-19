@@ -31,6 +31,7 @@ import {
   fetchLiveVoters,
   getSavedAttendance,
   saveAttendance,
+  clearAllLocalStorage,
   AttendanceMap,
   playAttendanceBeep,
   OPERATOR_STORAGE_KEY,
@@ -201,16 +202,16 @@ export default function App() {
       Boolean(v.absensi && v.absensi.trim().length > 0 && v.absensi.toUpperCase() !== '0')
   ).length;
 
-  // Reset attendance
+  // Reset attendance & clear local storage
   const handleResetAttendance = () => {
+    clearAllLocalStorage();
     setAttendanceMap({});
-    saveAttendance({});
     setVoters((prev) => prev.map((v) => ({ ...v, absensi: '' })));
     setShowResetConfirmModal(false);
     if (soundEnabled) {
       playAttendanceBeep('undo');
     }
-    showToast('✓ Seluruh daftar hadir berhasil direset ke status Belum Hadir.');
+    showToast('✓ Data di penyimpanan lokal berhasil dihapus & daftar hadir bersih!');
   };
 
   // Export CSV of Attendance
@@ -443,16 +444,15 @@ export default function App() {
               <RotateCcw className="w-6 h-6" />
             </div>
             <h3 className="text-lg font-bold text-center text-slate-900 mb-2">
-              Reset Seluruh Daftar Hadir?
+              Hapus Data di Penyimpanan Lokal?
             </h3>
             <p className="text-xs sm:text-sm text-slate-600 text-center mb-5 leading-relaxed">
-              Tindakan ini akan mengosongkan status kehadiran{' '}
-              <strong className="text-rose-600 font-bold">{totalAttended} pemilih</strong> yang saat ini tercatat hadir dan mengembalikan seluruh DPT ke status <strong>Belum Hadir</strong>.
+              Tindakan ini akan menghapus seluruh rekaman absensi di penyimpanan lokal browser ({totalAttended} pemilih saat ini tercatat hadir) dan mengosongkan status kehadiran seluruh DPT menjadi <strong>Belum Hadir</strong>.
             </p>
             <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl mb-6 flex items-start gap-2.5 text-xs text-amber-900">
               <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
               <span>
-                Pastikan Anda telah mengekspor cadangan data via tombol <strong>Ekspor CSV</strong> sebelum melakukan reset jika data diperlukan di kemudian waktu.
+                Pastikan Anda telah mengekspor cadangan via tombol <strong>Ekspor CSV</strong> jika data kehadiran saat ini masih diperlukan.
               </span>
             </div>
             <div className="flex items-center gap-3">
@@ -469,7 +469,7 @@ export default function App() {
                 className="flex-1 py-2.5 px-4 bg-rose-600 hover:bg-rose-700 text-white text-xs sm:text-sm font-semibold rounded-xl transition-colors shadow-sm cursor-pointer flex items-center justify-center gap-1.5"
               >
                 <RotateCcw className="w-4 h-4" />
-                <span>Ya, Reset Hadir</span>
+                <span>Ya, Hapus Data Lokal</span>
               </button>
             </div>
           </div>
