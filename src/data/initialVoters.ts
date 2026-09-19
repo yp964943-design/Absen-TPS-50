@@ -73,7 +73,7 @@ export const INITIAL_VOTERS: Voter[] = [
     "jk": "P",
     "alamat": "PESONA GADING CIBITUNG",
     "rt": "5",
-    "absensi": ""
+    "absensi": "HADIR (19.32)"
   },
   {
     "no": 9,

@@ -23,6 +23,9 @@ import {
 import {
   SyncSettingsModal,
 } from './components/SyncSettingsModal';
+import {
+  ChangeLinkModal,
+} from './components/ChangeLinkModal';
 import { INITIAL_VOTERS, Voter } from './data/initialVoters';
 import {
   fetchLiveVoters,
@@ -34,6 +37,7 @@ import {
   GOOGLE_SHEET_CSV_URL,
   syncAttendanceToAppsScript,
   getAppsScriptUrl,
+  getActiveSheetViewUrl,
 } from './utils/csvSync';
 import { ShieldCheck, Info, Sparkles, CheckCircle2, AlertTriangle, ExternalLink } from 'lucide-react';
 
@@ -60,6 +64,8 @@ export default function App() {
   const [activeSlipVoter, setActiveSlipVoter] = useState<Voter | null>(null);
   const [showReportModal, setShowReportModal] = useState<boolean>(false);
   const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
+  const [showChangeLinkModal, setShowChangeLinkModal] = useState<boolean>(false);
+  const [sheetViewUrl, setSheetViewUrl] = useState<string>(() => getActiveSheetViewUrl());
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Operator persistence
@@ -257,6 +263,8 @@ export default function App() {
         onExportCSV={handleExportCSV}
         onOpenSettings={() => setShowSettingsModal(true)}
         isAppsScriptConfigured={isAppsScriptConfigured}
+        onOpenChangeLink={() => setShowChangeLinkModal(true)}
+        sheetViewUrl={sheetViewUrl}
       />
 
       {/* Main Content Area */}
@@ -394,8 +402,24 @@ export default function App() {
               showToast('✓ URL Google Apps Script berhasil terpasang! Sinkronisasi tulis ke Google Sheets aktif.');
             }
           }}
+          onSheetUrlChanged={(url) => {
+            setSheetViewUrl(url);
+            syncWithGoogleSheets();
+            showToast('✓ Tautan Google Spreadsheet berhasil diperbarui & disinkronkan!');
+          }}
         />
       )}
+
+      {/* Quick Change Google Sheet Link Modal */}
+      <ChangeLinkModal
+        isOpen={showChangeLinkModal}
+        onClose={() => setShowChangeLinkModal(false)}
+        onLinkUpdated={(newUrl) => {
+          setSheetViewUrl(newUrl);
+          syncWithGoogleSheets();
+          showToast('✓ Tautan Google Spreadsheet berhasil diperbarui & disinkronkan!');
+        }}
+      />
     </div>
   );
 }

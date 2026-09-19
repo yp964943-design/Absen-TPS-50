@@ -17,11 +17,15 @@ import {
 } from 'lucide-react';
 import {
   GOOGLE_SHEET_CSV_URL,
+  DEFAULT_GOOGLE_SHEET_VIEW_URL,
   AttendanceMap,
   getAppsScriptUrl,
   saveAppsScriptUrl,
   testAppsScriptPing,
   sendTestVoterToAppsScript,
+  getCustomSheetUrl,
+  saveCustomSheetUrl,
+  getActiveSheetViewUrl,
 } from '../utils/csvSync';
 import { Voter } from '../data/initialVoters';
 import { GOOGLE_APPS_SCRIPT_CODE } from '../data/appsScriptCode';
@@ -37,6 +41,7 @@ interface SyncSettingsModalProps {
   onResetAttendance: () => void;
   onExportCSV: () => void;
   onAppsScriptUrlChanged?: (url: string) => void;
+  onSheetUrlChanged?: (url: string) => void;
 }
 
 export const SyncSettingsModal: React.FC<SyncSettingsModalProps> = ({
@@ -50,11 +55,16 @@ export const SyncSettingsModal: React.FC<SyncSettingsModalProps> = ({
   onResetAttendance,
   onExportCSV,
   onAppsScriptUrlChanged,
+  onSheetUrlChanged,
 }) => {
   const [activeTab, setActiveTab] = useState<'script' | 'database'>('script');
   const [copiedCsvUrl, setCopiedCsvUrl] = useState(false);
   const [copiedScript, setCopiedScript] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
+
+  // Sheet URL states
+  const [sheetUrlInput, setSheetUrlInput] = useState<string>(() => getCustomSheetUrl() || DEFAULT_GOOGLE_SHEET_VIEW_URL);
+  const [sheetSaveNotice, setSheetSaveNotice] = useState<string | null>(null);
 
   // Apps Script states
   const [appsScriptUrl, setAppsScriptUrlState] = useState<string>(() => getAppsScriptUrl());
@@ -64,9 +74,29 @@ export const SyncSettingsModal: React.FC<SyncSettingsModalProps> = ({
   const [testWriteResult, setTestWriteResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const handleCopyCsvUrl = () => {
-    navigator.clipboard.writeText(GOOGLE_SHEET_CSV_URL);
+    navigator.clipboard.writeText(sheetUrlInput);
     setCopiedCsvUrl(true);
     setTimeout(() => setCopiedCsvUrl(false), 2000);
+  };
+
+  const handleSaveSheetUrl = () => {
+    const trimmed = sheetUrlInput.trim();
+    saveCustomSheetUrl(trimmed);
+    if (onSheetUrlChanged) {
+      onSheetUrlChanged(getActiveSheetViewUrl());
+    }
+    setSheetSaveNotice('Tautan Google Spreadsheet berhasil diperbarui!');
+    setTimeout(() => setSheetSaveNotice(null), 3000);
+  };
+
+  const handleResetSheetUrl = () => {
+    saveCustomSheetUrl('');
+    setSheetUrlInput(DEFAULT_GOOGLE_SHEET_VIEW_URL);
+    if (onSheetUrlChanged) {
+      onSheetUrlChanged(DEFAULT_GOOGLE_SHEET_VIEW_URL);
+    }
+    setSheetSaveNotice('Tautan dikembalikan ke Spreadsheet Resmi TPS 50.');
+    setTimeout(() => setSheetSaveNotice(null), 3000);
   };
 
   const handleCopyScript = () => {
@@ -388,37 +418,75 @@ export const SyncSettingsModal: React.FC<SyncSettingsModalProps> = ({
               </button>
             </div>
 
-            {/* Published Spreadsheet URL */}
-            <div>
-              <label className="font-semibold text-slate-800 block mb-1.5">
-                URL Database Google Sheets Terpublikasi:
-              </label>
+            {/* Configurable Spreadsheet URL */}
+            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                  <Link2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Tautan Google Spreadsheet DPT:</span>
+                </label>
+                {Boolean(getCustomSheetUrl()) ? (
+                  <span className="text-[10px] text-amber-700 bg-amber-100 font-semibold px-2 py-0.5 rounded-md">
+                    Link Kustom
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-emerald-700 bg-emerald-100 font-semibold px-2 py-0.5 rounded-md">
+                    Link TPS 50 Resmi
+                  </span>
+                )}
+              </div>
+
               <div className="flex items-center gap-1.5">
                 <input
                   type="text"
-                  readOnly
-                  value={GOOGLE_SHEET_CSV_URL}
-                  className="w-full bg-slate-100 border border-slate-300 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-slate-600 truncate focus:outline-none"
+                  value={sheetUrlInput}
+                  onChange={(e) => setSheetUrlInput(e.target.value)}
+                  placeholder="https://docs.google.com/spreadsheets/d/.../edit"
+                  className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-2 text-xs font-mono text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                 />
                 <button
                   onClick={handleCopyCsvUrl}
-                  className="p-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg transition-colors shrink-0"
-                  title="Salin URL Database"
+                  className="p-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg transition-colors shrink-0 cursor-pointer"
+                  title="Salin Tautan"
                 >
                   {copiedCsvUrl ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
                 </button>
                 <a
-                  href={GOOGLE_SHEET_CSV_URL.replace(/output=csv/, 'output=html')}
+                  href={getActiveSheetViewUrl()}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors shrink-0"
-                  title="Buka Lembar Spreadsheet Asli"
+                  className="p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors shrink-0 cursor-pointer"
+                  title="Buka Lembar Spreadsheet Asli di Tab Baru"
                 >
                   <ExternalLink className="w-4 h-4" />
                 </a>
               </div>
-              <p className="text-[11px] text-slate-500 mt-1">
-                Data DPT pemilih disinkronkan secara real-time dari spreadsheet di atas.
+
+              {sheetSaveNotice && (
+                <div className="p-2 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-[11px] font-medium flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>{sheetSaveNotice}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <button
+                  onClick={handleResetSheetUrl}
+                  className="text-[11px] text-slate-500 hover:text-slate-800 underline cursor-pointer"
+                >
+                  Reset ke Link TPS 50 Asli
+                </button>
+                <button
+                  onClick={handleSaveSheetUrl}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Simpan Perubahan Link</span>
+                </button>
+              </div>
+
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                Anda dapat mengganti tautan ini dengan URL Spreadsheet Google Anda sendiri (baik format <code>/edit</code> maupun format <code>/pubhtml</code>).
               </p>
             </div>
 

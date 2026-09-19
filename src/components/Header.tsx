@@ -10,10 +10,8 @@ import {
   FileSpreadsheet,
   Printer,
   Download,
-  AlertTriangle,
-  Link2,
 } from 'lucide-react';
-import { GOOGLE_SHEET_CSV_URL } from '../utils/csvSync';
+import { getActiveSheetViewUrl } from '../utils/csvSync';
 
 interface HeaderProps {
   currentTime: Date;
@@ -30,6 +28,8 @@ interface HeaderProps {
   onExportCSV: () => void;
   onOpenSettings: () => void;
   isAppsScriptConfigured?: boolean;
+  onOpenChangeLink?: () => void;
+  sheetViewUrl?: string;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -47,6 +47,8 @@ export const Header: React.FC<HeaderProps> = ({
   onExportCSV,
   onOpenSettings,
   isAppsScriptConfigured = false,
+  onOpenChangeLink,
+  sheetViewUrl,
 }) => {
   const formattedTime = currentTime.toLocaleTimeString('id-ID', {
     hour: '2-digit',
@@ -175,38 +177,11 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </div>
 
-          {/* Direct Google Sheets write status & settings trigger */}
-          <button
-            onClick={onOpenSettings}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors cursor-pointer ${
-              isAppsScriptConfigured
-                ? 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300'
-                : 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/50 text-amber-300 animate-pulse'
-            }`}
-            title={
-              isAppsScriptConfigured
-                ? 'Integrasi Google Sheets Aktif (Klik untuk Pengaturan)'
-                : 'Klik untuk mengaktifkan sinkronisasi tulis ke Google Sheets'
-            }
-          >
-            {isAppsScriptConfigured ? (
-              <>
-                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                <span className="hidden sm:inline">Sheets Sync</span>
-              </>
-            ) : (
-              <>
-                <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-                <span>Setup Tulis Sheets</span>
-              </>
-            )}
-          </button>
-
           {/* Action quick links */}
           <div className="flex items-center gap-1.5">
             <button
               onClick={onOpenReport}
-              className="flex items-center gap-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 rounded-lg transition-colors"
+              className="flex items-center gap-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 rounded-lg transition-colors cursor-pointer"
               title="Cetak Berita Acara & Rekapitulasi TPS"
             >
               <Printer className="w-3.5 h-3.5 text-slate-300" />
@@ -215,21 +190,23 @@ export const Header: React.FC<HeaderProps> = ({
 
             <button
               onClick={onExportCSV}
-              className="flex items-center gap-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 rounded-lg transition-colors"
+              className="flex items-center gap-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 rounded-lg transition-colors cursor-pointer"
               title="Ekspor CSV Absensi Terkini"
             >
               <Download className="w-3.5 h-3.5 text-slate-300" />
               <span className="hidden sm:inline">Ekspor CSV</span>
             </button>
 
+            {/* Google Spreadsheet Link */}
             <a
-              href={GOOGLE_SHEET_CSV_URL.replace(/output=csv/, 'output=html')}
+              href={sheetViewUrl || getActiveSheetViewUrl()}
               target="_blank"
               rel="noopener noreferrer"
-              className="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white rounded-lg transition-colors"
-              title="Buka Database Google Spreadsheet Asli"
+              className="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
+              title="Buka Database Google Spreadsheet Asli di Tab Baru"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+              <span className="text-xs font-medium hidden xl:inline">Google Sheet</span>
             </a>
           </div>
         </div>
