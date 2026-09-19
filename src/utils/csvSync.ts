@@ -47,32 +47,99 @@ export async function syncAttendanceToAppsScript(
   waktu: string,
   petugas: string,
   customUrl?: string
-): Promise<{ success: boolean; message?: string }> {
+): Promise<{ success: boolean; configured: boolean; message: string }> {
   const url = customUrl || getAppsScriptUrl();
   if (!url) {
-    return { success: false, message: 'Apps Script URL belum dikonfigurasi' };
+    return {
+      success: false,
+      configured: false,
+      message: 'URL Google Apps Script belum dimasukkan. Data sementara hanya tersimpan di memori browser.',
+    };
   }
 
   try {
-    // Construct query parameters for GET request to avoid CORS preflight issues with GAS
-    const endpoint = new URL(url);
-    endpoint.searchParams.set('action', 'mark');
-    endpoint.searchParams.set('no', voterNo.toString());
-    endpoint.searchParams.set('hadir', hadir ? 'true' : 'false');
-    endpoint.searchParams.set('waktu', waktu);
-    endpoint.searchParams.set('petugas', petugas);
-    endpoint.searchParams.set('_t', Date.now().toString());
-
-    // Use mode: 'no-cors' as fallback to guarantee transmission even if redirect occurs
-    const res = await fetch(endpoint.toString(), {
-      method: 'GET',
-      mode: 'no-cors',
+    const payload = JSON.stringify({
+      action: 'mark',
+      no: voterNo,
+      hadir: hadir,
+      waktu: waktu,
+      petugas: petugas,
+      _t: Date.now(),
     });
 
-    return { success: true, message: 'Terkirim ke Google Sheets' };
+    // 1. Channel POST with mode: 'no-cors' (Standard for Google Apps Script Web App webhooks)
+    const postPromise = fetch(url, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
+      body: payload,
+    }).catch((e) => {
+      console.warn('GAS POST notice:', e);
+    });
+
+    // 2. Channel GET with query parameters as fallback / redundant delivery
+    const getUrl = new URL(url);
+    getUrl.searchParams.set('action', 'mark');
+    getUrl.searchParams.set('no', voterNo.toString());
+    getUrl.searchParams.set('hadir', hadir ? 'true' : 'false');
+    getUrl.searchParams.set('waktu', waktu);
+    getUrl.searchParams.set('petugas', petugas);
+    getUrl.searchParams.set('_t', Date.now().toString());
+
+    const getPromise = fetch(getUrl.toString(), {
+      method: 'GET',
+      mode: 'no-cors',
+    }).catch((e) => {
+      console.warn('GAS GET notice:', e);
+    });
+
+    // Wait for at least one to complete dispatch
+    await Promise.race([postPromise, getPromise]);
+
+    return {
+      success: true,
+      configured: true,
+      message: hadir
+        ? `Presensi #${voterNo} berhasil dikirim ke Google Sheets.`
+        : `Pembatalan presensi #${voterNo} dikirim ke Google Sheets.`,
+    };
   } catch (err) {
     console.warn('Failed sending attendance to Apps Script:', err);
-    return { success: false, message: String(err) };
+    return {
+      success: false,
+      configured: true,
+      message: `Gagal mengirim ke Google Sheets: ${String(err)}`,
+    };
+  }
+}
+
+/**
+ * Send a test attendance row (e.g. voter #1) to verify Google Sheets write
+ */
+export async function sendTestVoterToAppsScript(
+  url: string
+): Promise<{ success: boolean; message: string }> {
+  if (!url || !url.startsWith('https://script.google.com')) {
+    return {
+      success: false,
+      message: 'URL harus berupa tautan Web App Google Apps Script resmi yang berakhiran /exec',
+    };
+  }
+
+  const now = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB';
+  const res = await syncAttendanceToAppsScript(1, true, now, 'Uji Coba Sistem', url);
+  if (res.success) {
+    return {
+      success: true,
+      message: `Perintah uji coba berhasil dikirim! Silakan buka Google Spreadsheet Anda dan periksa Kolom F (ABSENSI) pada baris pemilih #1.`,
+    };
+  } else {
+    return {
+      success: false,
+      message: res.message,
+    };
   }
 }
 

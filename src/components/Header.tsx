@@ -10,6 +10,8 @@ import {
   FileSpreadsheet,
   Printer,
   Download,
+  AlertTriangle,
+  Link2,
 } from 'lucide-react';
 import { GOOGLE_SHEET_CSV_URL } from '../utils/csvSync';
 
@@ -27,6 +29,7 @@ interface HeaderProps {
   onOpenReport: () => void;
   onExportCSV: () => void;
   onOpenSettings: () => void;
+  isAppsScriptConfigured?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -43,6 +46,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenReport,
   onExportCSV,
   onOpenSettings,
+  isAppsScriptConfigured = false,
 }) => {
   const formattedTime = currentTime.toLocaleTimeString('id-ID', {
     hour: '2-digit',
@@ -150,7 +154,7 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={onRefresh}
               disabled={isSyncing}
               title="Sinkronkan data dengan Google Spreadsheet"
-              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-slate-200 hover:text-white rounded-md hover:bg-slate-700 transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-slate-200 hover:text-white rounded-md hover:bg-slate-700 transition-colors disabled:opacity-50 cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-emerald-400' : 'text-slate-400'}`} />
               <span className="hidden md:inline">Sync Sheets</span>
@@ -163,13 +167,40 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={() => setAutoSync(!autoSync)}
               title={autoSync ? 'Auto-sync aktif (30 detik)' : 'Auto-sync non-aktif'}
-              className={`ml-1 text-[10px] font-semibold px-2 py-0.5 rounded transition-colors ${
+              className={`ml-1 text-[10px] font-semibold px-2 py-0.5 rounded transition-colors cursor-pointer ${
                 autoSync ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               {autoSync ? 'Auto ON' : 'Auto OFF'}
             </button>
           </div>
+
+          {/* Direct Google Sheets write status & settings trigger */}
+          <button
+            onClick={onOpenSettings}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors cursor-pointer ${
+              isAppsScriptConfigured
+                ? 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300'
+                : 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/50 text-amber-300 animate-pulse'
+            }`}
+            title={
+              isAppsScriptConfigured
+                ? 'Integrasi Google Sheets Aktif (Klik untuk Pengaturan)'
+                : 'Klik untuk mengaktifkan sinkronisasi tulis ke Google Sheets'
+            }
+          >
+            {isAppsScriptConfigured ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                <span className="hidden sm:inline">Sheets Sync</span>
+              </>
+            ) : (
+              <>
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                <span>Setup Tulis Sheets</span>
+              </>
+            )}
+          </button>
 
           {/* Action quick links */}
           <div className="flex items-center gap-1.5">

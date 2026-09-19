@@ -35,11 +35,13 @@ import {
   syncAttendanceToAppsScript,
   getAppsScriptUrl,
 } from './utils/csvSync';
-import { ShieldCheck, Info, Sparkles, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, Info, Sparkles, CheckCircle2, AlertTriangle, ExternalLink } from 'lucide-react';
 
 export default function App() {
   const [voters, setVoters] = useState<Voter[]>(INITIAL_VOTERS);
   const [attendanceMap, setAttendanceMap] = useState<AttendanceMap>(() => getSavedAttendance());
+  const [appsScriptUrl, setAppsScriptUrl] = useState<string>(() => getAppsScriptUrl());
+  const isAppsScriptConfigured = Boolean(appsScriptUrl.trim());
   const [lastSyncTime, setLastSyncTime] = useState<string>('');
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [syncSource, setSyncSource] = useState<'google_sheets' | 'local_cache'>('local_cache');
@@ -162,16 +164,27 @@ export default function App() {
       playAttendanceBeep(hadir ? 'success' : 'undo');
     }
 
-    // Two-way sync to Google Apps Script (if configured)
-    syncAttendanceToAppsScript(voterNo, hadir, nowTimeStr, operator).catch((err) => {
-      console.warn('Apps Script sync notice:', err);
-    });
-
-    if (hadir && targetVoter) {
-      showToast(`✓ Presensi berhasil: #${targetVoter.no} - ${targetVoter.nama} (${nowTimeStr} WIB)`);
-    } else if (targetVoter) {
-      showToast(`Presensi dibatalkan: #${targetVoter.no} - ${targetVoter.nama}`);
+    // Two-way sync to Google Apps Script
+    if (!isAppsScriptConfigured) {
+      if (hadir && targetVoter) {
+        showToast(`⚠️ Presensi #${targetVoter.no} ${targetVoter.nama} tersimpan lokal. Belum masuk Google Sheets (Klik "Setup Tulis Sheets" untuk mengaktifkan).`);
+      } else if (targetVoter) {
+        showToast(`Pembatalan presensi #${targetVoter.no} - ${targetVoter.nama} tersimpan.`);
+      }
+      return;
     }
+
+    syncAttendanceToAppsScript(voterNo, hadir, nowTimeStr, operator).then((res) => {
+      if (res.success) {
+        if (hadir && targetVoter) {
+          showToast(`✓ Presensi #${targetVoter.no} ${targetVoter.nama} tersimpan & terkirim ke Google Sheets!`);
+        } else if (targetVoter) {
+          showToast(`Pembatalan presensi #${targetVoter.no} dikirim ke Google Sheets.`);
+        }
+      } else {
+        showToast(`⚠️ Presensi tersimpan di lokal, namun gagal sync Sheets: ${res.message}`);
+      }
+    });
   };
 
   // Reset attendance
@@ -243,10 +256,37 @@ export default function App() {
         onOpenReport={() => setShowReportModal(true)}
         onExportCSV={handleExportCSV}
         onOpenSettings={() => setShowSettingsModal(true)}
+        isAppsScriptConfigured={isAppsScriptConfigured}
       />
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
+        {/* Notice if Google Sheets real-time write is not yet configured */}
+        {!isAppsScriptConfigured && (
+          <div className="mb-5 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-300 rounded-xl p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-950 shadow-xs">
+            <div className="flex items-start sm:items-center gap-3">
+              <div className="p-2 bg-amber-500/20 text-amber-800 rounded-lg shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-amber-950">
+                  Data Presensi Baru Tersimpan di Memori Browser (Belum Masuk ke Google Sheet)
+                </p>
+                <p className="text-[11px] text-amber-900/90 leading-relaxed mt-0.5">
+                  Link CSV spreadsheet bawaan hanya bersifat <em>baca</em>. Untuk mengaktifkan penulisan otomatis ke <strong>Kolom F (ABSENSI) Google Sheet</strong> secara langsung, pasang Google Apps Script.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowSettingsModal(true)}
+              className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg shrink-0 transition-colors shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>Pasang Integrasi (2 Menit)</span>
+            </button>
+          </div>
+        )}
+
         {/* Top Executive Stats Overview */}
         <StatsOverview
           voters={voters}
@@ -349,8 +389,9 @@ export default function App() {
           onResetAttendance={handleResetAttendance}
           onExportCSV={handleExportCSV}
           onAppsScriptUrlChanged={(url) => {
+            setAppsScriptUrl(url);
             if (url) {
-              showToast('URL Google Apps Script berhasil disimpan!');
+              showToast('✓ URL Google Apps Script berhasil terpasang! Sinkronisasi tulis ke Google Sheets aktif.');
             }
           }}
         />

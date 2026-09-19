@@ -21,6 +21,7 @@ import {
   getAppsScriptUrl,
   saveAppsScriptUrl,
   testAppsScriptPing,
+  sendTestVoterToAppsScript,
 } from '../utils/csvSync';
 import { Voter } from '../data/initialVoters';
 import { GOOGLE_APPS_SCRIPT_CODE } from '../data/appsScriptCode';
@@ -59,6 +60,8 @@ export const SyncSettingsModal: React.FC<SyncSettingsModalProps> = ({
   const [appsScriptUrl, setAppsScriptUrlState] = useState<string>(() => getAppsScriptUrl());
   const [isTesting, setIsTesting] = useState<boolean>(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [isWritingTest, setIsWritingTest] = useState<boolean>(false);
+  const [testWriteResult, setTestWriteResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const handleCopyCsvUrl = () => {
     navigator.clipboard.writeText(GOOGLE_SHEET_CSV_URL);
@@ -81,7 +84,7 @@ export const SyncSettingsModal: React.FC<SyncSettingsModalProps> = ({
     if (!appsScriptUrl.trim()) {
       setTestResult({
         success: false,
-        message: 'Silakan tempel URL Web App dari Google Apps Script.',
+        message: 'Silakan tempel URL Web App dari Google Apps Script yang berakhiran /exec.',
       });
       return;
     }
@@ -92,6 +95,28 @@ export const SyncSettingsModal: React.FC<SyncSettingsModalProps> = ({
     const res = await testAppsScriptPing(appsScriptUrl.trim());
     setTestResult(res);
     setIsTesting(false);
+  };
+
+  const handleTestWriteRow = async () => {
+    saveAppsScriptUrl(appsScriptUrl);
+    if (onAppsScriptUrlChanged) {
+      onAppsScriptUrlChanged(appsScriptUrl);
+    }
+
+    if (!appsScriptUrl.trim()) {
+      setTestWriteResult({
+        success: false,
+        message: 'Silakan tempel URL Web App terlebih dahulu sebelum menguji tulis data.',
+      });
+      return;
+    }
+
+    setIsWritingTest(true);
+    setTestWriteResult(null);
+
+    const res = await sendTestVoterToAppsScript(appsScriptUrl.trim());
+    setTestWriteResult(res);
+    setIsWritingTest(false);
   };
 
   const attendedCount = Object.values(attendanceMap).filter((a) => a.hadir).length;
@@ -153,13 +178,16 @@ export const SyncSettingsModal: React.FC<SyncSettingsModalProps> = ({
         {activeTab === 'script' ? (
           <div className="p-6 space-y-5 overflow-y-auto text-xs text-slate-700">
             {/* Intro Alert */}
-            <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900 space-y-1">
-              <div className="font-bold flex items-center gap-2 text-emerald-800">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Solusi Resmi: Integrasi Google Apps Script (Two-Way Sync)</span>
+            <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-xl text-amber-950 space-y-1.5">
+              <div className="font-bold flex items-center gap-2 text-amber-900">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Penting: Mengapa Data Presensi Belum Masuk ke Google Sheet?</span>
               </div>
-              <p className="text-[11px] text-emerald-800/90 leading-relaxed">
-                Kode ini dipasang pada spreadsheet agar setiap kali petugas menekan tombol <strong>&quot;Tandai Hadir&quot;</strong> di aplikasi, catatan absensi langsung otomatis ditulis ke <strong>Kolom F (ABSENSI)</strong> di Google Sheets secara real-time.
+              <p className="text-[11px] text-amber-900/90 leading-relaxed">
+                Tautan CSV Spreadsheet yang dipublikasikan hanya bersifat <strong>BACA (Read-Only)</strong>. Untuk <strong>MENULIS & MENYIMPAN</strong> data kehadiran secara otomatis ke Google Sheets, Google mewajibkan penggunaan endpoint <strong>Google Apps Script Web App</strong>.
+              </p>
+              <p className="text-[11px] text-amber-900/90 leading-relaxed">
+                Silakan ikuti panduan 3 langkah di bawah ini (hanya butuh 2 menit). Setelah URL Web App ditempelkan di bawah, setiap kali petugas mengklik <strong>&quot;Tandai Hadir&quot;</strong>, status dan jam presensi akan langsung tertulis ke <strong>Kolom F (ABSENSI)</strong> di Google Spreadsheet secara real-time!
               </p>
             </div>
 
@@ -167,15 +195,15 @@ export const SyncSettingsModal: React.FC<SyncSettingsModalProps> = ({
             <div>
               <h4 className="font-bold text-slate-900 mb-2 flex items-center gap-1.5">
                 <HelpCircle className="w-4 h-4 text-slate-500" />
-                Cara Memasang Kode di Google Sheets (Hanya 3 Langkah):
+                Panduan Pemasangan Google Apps Script (Hanya 2 Menit):
               </h4>
-              <ol className="space-y-2 text-[11px] text-slate-600 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+              <ol className="space-y-2.5 text-[11px] text-slate-600 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                 <li className="flex items-start gap-2">
                   <span className="w-5 h-5 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">
                     1
                   </span>
                   <span>
-                    Buka Google Spreadsheet DPT Pilkades Wanajaya Anda, lalu klik menu <strong>Ekstensi</strong> &rarr; pilih <strong>Apps Script</strong>.
+                    Buka Google Spreadsheet DPT Pilkades Wanajaya Anda, lalu klik menu <strong>Ekstensi (Extensions)</strong> &rarr; pilih <strong>Apps Script</strong>.
                   </span>
                 </li>
                 <li className="flex items-start gap-2">
@@ -183,16 +211,26 @@ export const SyncSettingsModal: React.FC<SyncSettingsModalProps> = ({
                     2
                   </span>
                   <span>
-                    Hapus kode bawaan yang ada di file <code>Code.gs</code>, kemudian klik tombol <strong>&quot;Salin Kode Script&quot;</strong> di bawah dan tempelkan (Paste) kodenya. Klik ikon <strong>Simpan (Floppy Disk)</strong>.
+                    Hapus semua tulisan bawaan di editor <code>Code.gs</code>. Klik tombol <strong>&quot;Salin Kode Script&quot;</strong> di bawah, lalu tempelkan (Paste). Klik ikon disket <strong>Simpan (Save)</strong>.
                   </span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="w-5 h-5 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">
                     3
                   </span>
-                  <span>
-                    Klik tombol biru <strong>Terapkan (Deploy)</strong> &rarr; <strong>Penerapan baru (New deployment)</strong> &rarr; Pilih jenis <strong>Aplikasi web (Web app)</strong> &rarr; Pada bagian <em>&quot;Siapa yang memiliki akses&quot; (Who has access)</em>, pilih <strong>Siapa saja (Anyone)</strong> &rarr; Klik <strong>Terapkan</strong>, lalu salin URL Web App yang dihasilkan ke kolom input di bawah ini.
-                  </span>
+                  <div>
+                    <p>
+                      Klik tombol biru <strong>Terapkan (Deploy)</strong> di kanan atas &rarr; pilih <strong>Penerapan baru (New deployment)</strong>:
+                    </p>
+                    <ul className="mt-1 space-y-1 list-disc list-inside text-slate-700 bg-white p-2 rounded border border-slate-200 font-medium">
+                      <li>Pilih jenis (ikon gerigi ⚙️): <strong>Aplikasi web (Web app)</strong></li>
+                      <li>Jalankan sebagai (Execute as): <strong>Saya (Me)</strong></li>
+                      <li>Yang memiliki akses (Who has access): <strong className="text-emerald-700">Siapa saja (Anyone)</strong> <span className="text-[10px] text-slate-500">(Wajib &quot;Anyone&quot; agar browser dapat mengirim data)</span></li>
+                    </ul>
+                    <p className="mt-1">
+                      Klik <strong>Terapkan</strong> &rarr; Berikan izin akun (Review permissions &rarr; Advanced &rarr; Go to... unsafe) &rarr; Salin <strong>URL Aplikasi Web (Web App URL)</strong> yang berakhiran <code>/exec</code>, lalu tempelkan pada kolom input di bawah ini.
+                    </p>
+                  </div>
                 </li>
               </ol>
             </div>
@@ -245,6 +283,7 @@ export const SyncSettingsModal: React.FC<SyncSettingsModalProps> = ({
                   onChange={(e) => {
                     setAppsScriptUrlState(e.target.value);
                     setTestResult(null);
+                    setTestWriteResult(null);
                   }}
                   placeholder="https://script.google.com/macros/s/.../exec"
                   className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
@@ -275,6 +314,43 @@ export const SyncSettingsModal: React.FC<SyncSettingsModalProps> = ({
                   <span>{testResult.message}</span>
                 </div>
               )}
+
+              {/* Direct Live Write Test */}
+              <div className="pt-2 border-t border-slate-200">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <span className="font-semibold text-slate-900 text-xs">Uji Coba Tulis Langsung ke Google Sheet:</span>
+                    <p className="text-[11px] text-slate-500">
+                      Klik untuk mengirim 1 data presensi uji coba ke pemilih urut #1 di spreadsheet Anda.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleTestWriteRow}
+                    disabled={isWritingTest || !appsScriptUrl.trim()}
+                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shrink-0 transition-colors disabled:opacity-40 cursor-pointer shadow-xs"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isWritingTest ? 'animate-spin text-emerald-400' : ''}`} />
+                    <span>{isWritingTest ? 'Mengirim Data...' : 'Kirim Tes Baris #1'}</span>
+                  </button>
+                </div>
+
+                {testWriteResult && (
+                  <div
+                    className={`mt-2.5 p-2.5 rounded-lg border text-xs flex items-start gap-2 ${
+                      testWriteResult.success
+                        ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                        : 'bg-red-50 border-red-200 text-red-800'
+                    }`}
+                  >
+                    {testWriteResult.success ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                    )}
+                    <span className="leading-relaxed">{testWriteResult.message}</span>
+                  </div>
+                )}
+              </div>
 
               <p className="text-[11px] text-slate-500">
                 Setelah URL ini disimpan, setiap aksi verifikasi absensi di TPS akan otomatis memperbarui spreadsheet secara langsung!

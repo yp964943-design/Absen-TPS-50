@@ -1,16 +1,16 @@
 export const GOOGLE_APPS_SCRIPT_CODE = `/**
  * =========================================================================
- * SISTEM VERIFIKASI & ABSENSI PILKADES WANAJAYA 2026
- * Google Apps Script Web App (Integrasi Dua Arah / Two-Way Sync)
+ * SISTEM VERIFIKASI & ABSENSI PILKADES WANAJAYA 2026 - TPS 50
+ * Google Apps Script Web App (Integrasi Otomatis Dua Arah / Two-Way Sync)
  * =========================================================================
  * 
  * Struktur Kolom di Spreadsheet:
- * Kolom A: NO
- * Kolom B: NAMA
- * Kolom C: JK (L/P)
- * Kolom D: ALAMAT
- * Kolom E: RT
- * Kolom F: ABSENSI (Akan otomatis diisi tanggal/jam kehadiran)
+ * Kolom A (1): NO
+ * Kolom B (2): NAMA
+ * Kolom C (3): JK (L/P)
+ * Kolom D (4): ALAMAT
+ * Kolom E (5): RT
+ * Kolom F (6): ABSENSI (Akan otomatis diisi tanggal/jam kehadiran)
  */
 
 function doGet(e) {
@@ -23,7 +23,7 @@ function doPost(e) {
 
 function handleRequest(e) {
   var lock = LockService.getScriptLock();
-  // Kunci sheet hingga 30 detik untuk mencegah konflik saat beberapa meja verifikasi absen bersamaan
+  // Kunci sheet hingga 30 detik untuk mencegah konflik saat absensi cepat
   lock.tryLock(30000);
 
   try {
@@ -42,13 +42,14 @@ function handleRequest(e) {
 
     var action = params.action || 'ping';
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getActiveSheet();
+    var sheet = getTargetDptSheet(ss);
 
     // 1. TES KONEKSI
     if (action === 'ping') {
       return respondJSON({
         success: true,
-        message: "Koneksi Google Apps Script Pilkades Wanajaya Aktif!",
+        sheetName: sheet.getName(),
+        message: "Koneksi Google Apps Script Pilkades Wanajaya Aktif pada sheet: " + sheet.getName(),
         timestamp: new Date().toISOString()
       });
     }
@@ -79,17 +80,25 @@ function handleRequest(e) {
       if (targetRow === -1) {
         return respondJSON({
           success: false,
-          error: "Nomor urut DPT #" + voterNo + " tidak ditemukan pada baris data"
+          error: "Nomor urut DPT #" + voterNo + " tidak ditemukan pada sheet " + sheet.getName()
         });
       }
 
-      // Update nilai di Kolom F (ABSENSI) baris target
-      sheet.getRange(targetRow, 6).setValue(absensiValue);
+      // Cari kolom ABSENSI secara dinamis pada baris 1
+      var absensiCol = getAbsensiColumnIndex(sheet);
+
+      // Update nilai di Kolom ABSENSI baris target
+      sheet.getRange(targetRow, absensiCol).setValue(absensiValue);
+      
+      // Paksa Google Sheets menyimpan perubahan seketika
+      SpreadsheetApp.flush();
 
       return respondJSON({
         success: true,
         no: voterNo,
         row: targetRow,
+        col: absensiCol,
+        sheet: sheet.getName(),
         status: isHadir ? "HADIR" : "BELUM HADIR",
         absensi: absensiValue,
         message: isHadir 
@@ -101,6 +110,7 @@ function handleRequest(e) {
     // 3. AMBIL SEMUA STATUS PRESENSI DARI SHEET
     if (action === 'getAll') {
       var values = sheet.getDataRange().getValues();
+      var absensiColIdx = getAbsensiColumnIndex(sheet) - 1;
       var attendanceList = [];
 
       for (var i = 1; i < values.length; i++) {
@@ -110,7 +120,7 @@ function handleRequest(e) {
             no: noVal,
             nama: values[i][1],
             rt: values[i][4],
-            absensi: values[i][5] ? String(values[i][5]) : ""
+            absensi: values[i][absensiColIdx] ? String(values[i][absensiColIdx]) : ""
           });
         }
       }
@@ -118,19 +128,22 @@ function handleRequest(e) {
       return respondJSON({
         success: true,
         total: attendanceList.length,
+        sheet: sheet.getName(),
         data: attendanceList
       });
     }
 
-    // 4. RESET SELURUH KOLOM ABSENSI (KOLOM F)
+    // 4. RESET SELURUH KOLOM ABSENSI
     if (action === 'resetAll') {
       var lastRow = sheet.getLastRow();
+      var absCol = getAbsensiColumnIndex(sheet);
       if (lastRow > 1) {
-        sheet.getRange(2, 6, lastRow - 1, 1).clearContent();
+        sheet.getRange(2, absCol, lastRow - 1, 1).clearContent();
+        SpreadsheetApp.flush();
       }
       return respondJSON({
         success: true,
-        message: "Seluruh catatan di Kolom F (ABSENSI) berhasil dikosongkan."
+        message: "Seluruh catatan di Kolom ABSENSI berhasil dikosongkan."
       });
     }
 
@@ -141,6 +154,47 @@ function handleRequest(e) {
   } finally {
     lock.releaseLock();
   }
+}
+
+/**
+ * Mencari tab sheet DPT dengan cerdas (berdasarkan GID 915343721 atau header NO & NAMA)
+ */
+function getTargetDptSheet(ss) {
+  var sheets = ss.getSheets();
+  
+  // 1. Cek sheet yang cocok dengan GID 915343721
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].getSheetId() === 915343721) {
+      return sheets[i];
+    }
+  }
+
+  // 2. Cek sheet yang baris pertamanya memiliki header NO dan NAMA
+  for (var j = 0; j < sheets.length; j++) {
+    var maxCols = Math.min(sheets[j].getLastColumn() || 1, 10);
+    var firstRow = sheets[j].getRange(1, 1, 1, maxCols).getValues()[0];
+    var rowText = firstRow.join(" ").toUpperCase();
+    if (rowText.indexOf("NO") !== -1 && rowText.indexOf("NAMA") !== -1) {
+      return sheets[j];
+    }
+  }
+
+  // 3. Fallback ke sheet aktif atau sheet pertama
+  return ss.getActiveSheet() || sheets[0];
+}
+
+/**
+ * Mendeteksi kolom ABSENSI (default Kolom F / ke-6)
+ */
+function getAbsensiColumnIndex(sheet) {
+  var headerRow = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 6)).getValues()[0];
+  for (var c = 0; c < headerRow.length; c++) {
+    var title = String(headerRow[c] || "").toUpperCase().trim();
+    if (title === 'ABSENSI' || title === 'KEHADIRAN' || title === 'STATUS') {
+      return c + 1; // 1-indexed
+    }
+  }
+  return 6; // Default kolom F
 }
 
 function respondJSON(data) {
