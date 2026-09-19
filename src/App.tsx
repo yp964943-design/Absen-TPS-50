@@ -39,6 +39,10 @@ import {
   syncAttendanceToAppsScript,
   getAppsScriptUrl,
   getActiveSheetViewUrl,
+  fetchServerAttendance,
+  markAttendanceOnServer,
+  resetAttendanceOnServer,
+  saveConfigToServer,
 } from './utils/csvSync';
 import { ShieldCheck, Info, Sparkles, CheckCircle2, AlertTriangle, ExternalLink, RotateCcw } from 'lucide-react';
 
@@ -131,12 +135,101 @@ export default function App() {
     }
   }, []);
 
-  // Initial fetch on mount
+  // Initial fetch on mount & connect to real-time server stream
   useEffect(() => {
     syncWithGoogleSheets();
+
+    // Fetch authoritative shared attendance from server
+    fetchServerAttendance().then((res) => {
+      if (res.success && res.attendanceMap) {
+        setAttendanceMap(res.attendanceMap);
+        saveAttendance(res.attendanceMap);
+      }
+      if (res.appsScriptUrl) setAppsScriptUrl(res.appsScriptUrl);
+      if (res.sheetViewUrl) setSheetViewUrl(res.sheetViewUrl);
+    });
+
+    // Real-time EventSource stream for zero-latency multi-device push updates
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource('/api/attendance/stream');
+
+      eventSource.addEventListener('init', (e: MessageEvent) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.attendanceMap) {
+            setAttendanceMap(data.attendanceMap);
+            saveAttendance(data.attendanceMap);
+          }
+          if (data.appsScriptUrl) setAppsScriptUrl(data.appsScriptUrl);
+          if (data.sheetViewUrl) setSheetViewUrl(data.sheetViewUrl);
+        } catch (err) {
+          console.warn('Error parsing SSE init:', err);
+        }
+      });
+
+      eventSource.addEventListener('update', (e: MessageEvent) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.attendanceMap) {
+            setAttendanceMap(data.attendanceMap);
+            saveAttendance(data.attendanceMap);
+          }
+        } catch (err) {
+          console.warn('Error parsing SSE update:', err);
+        }
+      });
+
+      eventSource.addEventListener('reset', () => {
+        setAttendanceMap({});
+        saveAttendance({});
+        setVoters((prev) => prev.map((v) => ({ ...v, absensi: '' })));
+      });
+
+      eventSource.addEventListener('config', (e: MessageEvent) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.appsScriptUrl !== undefined) setAppsScriptUrl(data.appsScriptUrl);
+          if (data.sheetViewUrl !== undefined) setSheetViewUrl(data.sheetViewUrl);
+        } catch (err) {
+          console.warn('Error parsing SSE config:', err);
+        }
+      });
+    } catch (err) {
+      console.warn('SSE EventSource setup error:', err);
+    }
+
+    return () => {
+      eventSource?.close();
+    };
   }, [syncWithGoogleSheets]);
 
-  // Auto-sync polling every 30 seconds if enabled
+  // Fast polling fallback (every 3 seconds) to ensure mobile & background tabs always match
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchServerAttendance().then((res) => {
+          if (res.success && res.attendanceMap) {
+            setAttendanceMap((prev) => {
+              const currentKeys = Object.keys(prev);
+              const serverKeys = Object.keys(res.attendanceMap);
+              if (
+                currentKeys.length !== serverKeys.length ||
+                JSON.stringify(prev) !== JSON.stringify(res.attendanceMap)
+              ) {
+                saveAttendance(res.attendanceMap);
+                return res.attendanceMap;
+              }
+              return prev;
+            });
+          }
+        });
+      }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Auto-sync polling with Google Sheets every 30 seconds if enabled
   useEffect(() => {
     if (!autoSync) return;
     const interval = setInterval(() => {
@@ -153,6 +246,7 @@ export default function App() {
       minute: '2-digit',
     });
 
+    // 1. Optimistic UI update
     setAttendanceMap((prev) => {
       const next = { ...prev };
       if (hadir) {
@@ -172,10 +266,18 @@ export default function App() {
       playAttendanceBeep(hadir ? 'success' : 'undo');
     }
 
-    // Two-way sync to Google Apps Script
+    // 2. Synchronize to centralized server (broadcasts to all other devices)
+    markAttendanceOnServer(voterNo, hadir, nowTimeStr, operator).then((res) => {
+      if (res.success && res.attendanceMap) {
+        setAttendanceMap(res.attendanceMap);
+        saveAttendance(res.attendanceMap);
+      }
+    });
+
+    // 3. Two-way sync to Google Apps Script (if configured)
     if (!isAppsScriptConfigured) {
       if (hadir && targetVoter) {
-        showToast(`⚠️ Presensi #${targetVoter.no} ${targetVoter.nama} tersimpan lokal. Belum masuk Google Sheets (Klik "Setup Tulis Sheets" untuk mengaktifkan).`);
+        showToast(`✓ Presensi #${targetVoter.no} ${targetVoter.nama} tersimpan & sinkron antar-perangkat.`);
       } else if (targetVoter) {
         showToast(`Pembatalan presensi #${targetVoter.no} - ${targetVoter.nama} tersimpan.`);
       }
@@ -190,7 +292,7 @@ export default function App() {
           showToast(`Pembatalan presensi #${targetVoter.no} dikirim ke Google Sheets.`);
         }
       } else {
-        showToast(`⚠️ Presensi tersimpan di lokal, namun gagal sync Sheets: ${res.message}`);
+        showToast(`⚠️ Presensi tersimpan di server, namun gagal sync Sheets: ${res.message}`);
       }
     });
   };
@@ -202,8 +304,9 @@ export default function App() {
       Boolean(v.absensi && v.absensi.trim().length > 0 && v.absensi.toUpperCase() !== '0')
   ).length;
 
-  // Reset attendance & clear local storage
+  // Reset attendance & clear local and server storage
   const handleResetAttendance = () => {
+    resetAttendanceOnServer();
     clearAllLocalStorage();
     setAttendanceMap({});
     setVoters((prev) => prev.map((v) => ({ ...v, absensi: '' })));
@@ -211,7 +314,7 @@ export default function App() {
     if (soundEnabled) {
       playAttendanceBeep('undo');
     }
-    showToast('✓ Data di penyimpanan lokal berhasil dihapus & daftar hadir bersih!');
+    showToast('✓ Data kehadiran berhasil di-reset di semua perangkat!');
   };
 
   // Export CSV of Attendance
@@ -413,12 +516,14 @@ export default function App() {
           onExportCSV={handleExportCSV}
           onAppsScriptUrlChanged={(url) => {
             setAppsScriptUrl(url);
+            saveConfigToServer(url, sheetViewUrl);
             if (url) {
               showToast('✓ URL Google Apps Script berhasil terpasang! Sinkronisasi tulis ke Google Sheets aktif.');
             }
           }}
           onSheetUrlChanged={(url) => {
             setSheetViewUrl(url);
+            saveConfigToServer(appsScriptUrl, url);
             syncWithGoogleSheets();
             showToast('✓ Tautan Google Spreadsheet berhasil diperbarui & disinkronkan!');
           }}
@@ -431,6 +536,7 @@ export default function App() {
         onClose={() => setShowChangeLinkModal(false)}
         onLinkUpdated={(newUrl) => {
           setSheetViewUrl(newUrl);
+          saveConfigToServer(appsScriptUrl, newUrl);
           syncWithGoogleSheets();
           showToast('✓ Tautan Google Spreadsheet berhasil diperbarui & disinkronkan!');
         }}

@@ -330,6 +330,100 @@ export function getSavedAttendance(): AttendanceMap {
 }
 
 /**
+ * Fetch shared attendance map and configuration from centralized server
+ */
+export async function fetchServerAttendance(): Promise<{
+  success: boolean;
+  attendanceMap: AttendanceMap;
+  appsScriptUrl?: string;
+  sheetViewUrl?: string;
+  lastUpdated?: string;
+}> {
+  try {
+    const res = await fetch('/api/attendance', {
+      headers: { Accept: 'application/json' },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        success: true,
+        attendanceMap: data.attendanceMap || {},
+        appsScriptUrl: data.appsScriptUrl || '',
+        sheetViewUrl: data.sheetViewUrl || '',
+        lastUpdated: data.lastUpdated,
+      };
+    }
+  } catch (err) {
+    console.warn('Cannot reach /api/attendance server endpoint, using fallback:', err);
+  }
+  return {
+    success: false,
+    attendanceMap: getSavedAttendance(),
+  };
+}
+
+/**
+ * Persist marked attendance on centralized server so all devices stay identical
+ */
+export async function markAttendanceOnServer(
+  voterNo: number,
+  hadir: boolean,
+  waktu?: string,
+  petugas?: string
+): Promise<{ success: boolean; attendanceMap?: AttendanceMap }> {
+  try {
+    const res = await fetch('/api/attendance/mark', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ voterNo, hadir, waktu, petugas }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return { success: true, attendanceMap: data.attendanceMap };
+    }
+  } catch (err) {
+    console.warn('markAttendanceOnServer error:', err);
+  }
+  return { success: false };
+}
+
+/**
+ * Reset shared attendance on centralized server for all connected devices
+ */
+export async function resetAttendanceOnServer(): Promise<{ success: boolean }> {
+  try {
+    const res = await fetch('/api/attendance/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (res.ok) {
+      return { success: true };
+    }
+  } catch (err) {
+    console.warn('resetAttendanceOnServer error:', err);
+  }
+  return { success: false };
+}
+
+/**
+ * Save configuration to centralized server so all devices share Apps Script and Sheet URLs
+ */
+export async function saveConfigToServer(
+  appsScriptUrl?: string,
+  sheetViewUrl?: string
+): Promise<void> {
+  try {
+    await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ appsScriptUrl, sheetViewUrl }),
+    });
+  } catch (err) {
+    console.warn('saveConfigToServer error:', err);
+  }
+}
+
+/**
  * Save attendance map to LocalStorage
  */
 export function saveAttendance(map: AttendanceMap): void {
